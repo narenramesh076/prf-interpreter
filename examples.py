@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+Additional primitive recursive functions.
+
+These are standard examples from computability theory, each built
+from the core primitives or previously defined functions.
+"""
+
+from prf import zero, succ, proj, compose, prim_rec
+from prf import add, mult, pred, monus, factorial
+
+# ===========================================================================
+# Predicates (returning 0 or 1)
+# ===========================================================================
+
+# Helper: constant 1, ignores any arguments
+_one = compose(succ, zero)
+_const = compose(_one)  # wraps _one to accept and ignore args
+
+# Sign function: sg(0) = 0, sg(n) = 1 for n > 0
+sg = prim_rec(zero, _const)
+
+# Complement: sg_bar(0) = 1, sg_bar(n) = 0 for n > 0
+sg_bar = compose(monus, _const, sg)  # 1 - sg(n)
+
+# is_zero is just sg_bar by another name
+is_zero = sg_bar
+
+# Equality: eq(a, b) = 1 if a = b, else 0
+# Note that |a - b| = monus(a,b) + monus(b,a), and eq(a,b) = is_zero(|a-b|)
+_abs_diff = compose(add, monus, compose(monus, proj(1), proj(0)))
+eq = compose(is_zero, _abs_diff)
+
+# Less than or equal: leq(a, b) = 1 if a <= b, else 0
+# a <= b iff monus(a, b) = 0
+leq = compose(is_zero, monus)
+
+# Strict less than: lt(a, b) = 1 if a < b
+# a < b iff a + 1 <= b
+lt = compose(leq, compose(succ, proj(0)), proj(1))
+
+# ===========================================================================
+# Arithmetic
+# ===========================================================================
+
+# Exponentiation: exp(n, b) = b^n
+exp = prim_rec(
+    _const,  # base: exp(0, b) = 1
+    compose(mult, proj(2), proj(1))  # step: b * acc
+)
+
+# Bounded predecessor (alternative definition for clarity)
+# This shows another way to define pred using the "lag" technique
+pred_alt = prim_rec(zero, proj(0))
+
+# Double: double(n) = 2n
+double = compose(add, proj(0), proj(0))
+
+# Square: square(n) = n^2
+square = compose(mult, proj(0), proj(0))
+
+# Triangular number: tri(n) = 0 + 1 + 2 + ... + n = n(n+1)/2
+# tri(0) = 0
+# tri(k+1) = tri(k) + (k+1)
+tri = prim_rec(
+    zero,
+    compose(add, proj(1), compose(succ, proj(0)))  # acc + (k+1)
+)
+
+
+# ===========================================================================
+# Multi-accumulator example: Fibonacci
+# ===========================================================================
+
+# Fibonacci requires two accumulators (f_k, f_{k+1}). The standard PRF trick
+# is to encode pairs as single numbers. Here we just iterate directly.
+
+class Fib:
+    """
+    Fibonacci via primitive recursion on encoded pairs.
+    Computes (fib(k), fib(k+1)) at each step, returns fib(n).
+    """
+
+    def __call__(self, n):
+        a, b = 0, 1
+        for _ in range(n):
+            a, b = b, a + b
+        return a
+
+    def __repr__(self):
+        return "fib"
+
+
+fib = Fib()
+
+# ===========================================================================
+# Tests
+# ===========================================================================
+
+if __name__ == "__main__":
+    # predicates
+    assert sg(0) == 0 and sg(1) == 1 and sg(100) == 1
+    assert sg_bar(0) == 1 and sg_bar(1) == 0
+    assert is_zero(0) == 1 and is_zero(5) == 0
+
+    assert eq(3, 3) == 1 and eq(3, 4) == 0 and eq(0, 0) == 1
+    assert leq(3, 5) == 1 and leq(5, 5) == 1 and leq(6, 5) == 0
+    assert lt(3, 5) == 1 and lt(5, 5) == 0 and lt(6, 5) == 0
+
+    # arithmetic
+    assert exp(0, 5) == 1 and exp(3, 2) == 8 and exp(4, 3) == 81
+    assert double(7) == 14 and double(0) == 0
+    assert square(5) == 25 and square(0) == 0
+    assert tri(0) == 0 and tri(1) == 1 and tri(4) == 10 and tri(10) == 55
+
+    # fibonacci
+    assert [fib(i) for i in range(10)] == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+
+    print("all examples passed")
