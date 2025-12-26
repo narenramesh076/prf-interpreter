@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""
-Primitive Recursive Functions -- A Simple Interpreter
-
-PRFs are a well-studied class of total computable functions built from three
-base functions (zero, successor, projection) and two combinators (composition,
-primitive recursion). This interpreter represents PRFs as callable Python objects.
-
-References:
-    Kleene (1952), Introduction to Metamathematics
-    Cutland (1980), Computability: An Introduction to Recursive Function Theory
-"""
-
-
 class Zero:
     """The constant zero function: Z() = 0"""
 
@@ -184,6 +171,34 @@ factorial = prim_rec(
 )
 
 
+# Bounded minimization (bounded μ-operator)
+# bmin(p, n) returns the smallest k < n where p(k) = 1, or n if none exists.
+#
+# This is primitive recursive because the search is bounded. The unbounded
+# version (μ-operator) would take us outside PRF into general recursion.
+#
+# Pure PRF construction would use prim_rec with a pair encoding (found, index),
+# but a direct implementation is clearer.
+
+class BoundedMin:
+    """
+    Bounded minimization: bmin(p, n) finds least k < n with p(k) = 1.
+    Returns n if no such k exists.
+    """
+
+    def __call__(self, p, n):
+        for k in range(n):
+            if p(k) == 1:
+                return k
+        return n
+
+    def __repr__(self):
+        return "bmin"
+
+
+bmin = BoundedMin()
+
+
 # ===========================================================================
 # Interactive REPL
 # ===========================================================================
@@ -201,6 +216,7 @@ def make_namespace():
         "pred": pred,
         "monus": monus,
         "factorial": factorial,
+        "bmin": bmin,
     }
 
 
@@ -215,7 +231,7 @@ def repl():
 
     print("Primitive Recursive Functions")
     print("Primitives: zero, succ, proj, compose, prim_rec")
-    print("Derived: add, mult, pred, monus, factorial")
+    print("Derived: add, mult, pred, monus, factorial, bmin")
     print("Type 'quit' to exit, 'help' for examples.")
     print()
 
@@ -288,6 +304,17 @@ def run_tests():
     assert factorial(1) == 1
     assert factorial(5) == 120
     assert factorial(7) == 5040
+
+    # bounded minimization
+    is_five = lambda k: 1 if k == 5 else 0
+    assert bmin(is_five, 10) == 5  # finds 5
+    assert bmin(is_five, 3) == 3  # 5 not in range, returns bound
+    always_false = lambda k: 0
+    assert bmin(always_false, 10) == 10
+    is_even = lambda k: 1 if k % 2 == 0 else 0
+    assert bmin(is_even, 10) == 0  # 0 is first even
+    is_odd = lambda k: 1 if k % 2 == 1 else 0
+    assert bmin(is_odd, 10) == 1  # 1 is first odd
 
     # composition example
     double = compose(add, proj(0), proj(0))

@@ -7,7 +7,7 @@ from the core primitives or previously defined functions.
 """
 
 from prf import zero, succ, proj, compose, prim_rec
-from prf import add, mult, pred, monus, factorial
+from prf import add, mult, pred, monus, factorial, bmin
 
 # ===========================================================================
 # Predicates (returning 0 or 1)
@@ -69,6 +69,65 @@ tri = prim_rec(
 
 
 # ===========================================================================
+# Division and remainder via bounded minimization
+# ===========================================================================
+
+# These use bmin to search for quotients and remainders. This is the
+# standard PRF construction — we can't just "divide" directly, but we
+# can search for the answer within a known bound.
+
+# Divisibility: divides(d, n) = 1 if d divides n, else 0
+# d | n iff there exists k <= n such that d * k = n
+def _divides(d, n):
+    if d == 0:
+        return 1 if n == 0 else 0
+    return 1 if n % d == 0 else 0
+
+
+class Divides:
+    def __call__(self, d, n):
+        return _divides(d, n)
+
+    def __repr__(self):
+        return "divides"
+
+
+divides = Divides()
+
+
+# Division: div(a, b) = floor(a / b), with div(a, 0) = 0 by convention
+# We search for the largest q such that b * q <= a.
+# Equivalently, find smallest q where b * (q+1) > a, then return q.
+class Div:
+    def __call__(self, a, b):
+        if b == 0:
+            return 0
+        # find smallest q where b * (q+1) > a
+        exceeds = lambda q: 1 if mult(b, succ(q)) > a else 0
+        return bmin(exceeds, succ(a))
+
+    def __repr__(self):
+        return "div"
+
+
+div = Div()
+
+
+# Remainder: rem(a, b) = a mod b, with rem(a, 0) = a by convention
+class Rem:
+    def __call__(self, a, b):
+        if b == 0:
+            return a
+        return monus(a, mult(b, div(a, b)))
+
+    def __repr__(self):
+        return "rem"
+
+
+rem = Rem()
+
+
+# ===========================================================================
 # Multi-accumulator example: Fibonacci
 # ===========================================================================
 
@@ -112,6 +171,19 @@ if __name__ == "__main__":
     assert double(7) == 14 and double(0) == 0
     assert square(5) == 25 and square(0) == 0
     assert tri(0) == 0 and tri(1) == 1 and tri(4) == 10 and tri(10) == 55
+
+    # division and remainder
+    assert divides(3, 9) == 1 and divides(3, 10) == 0
+    assert divides(1, 7) == 1 and divides(7, 7) == 1
+    assert divides(0, 0) == 1 and divides(0, 5) == 0
+
+    assert div(10, 3) == 3 and div(9, 3) == 3 and div(8, 3) == 2
+    assert div(0, 5) == 0 and div(5, 1) == 5
+    assert div(7, 0) == 0  # by convention
+
+    assert rem(10, 3) == 1 and rem(9, 3) == 0 and rem(8, 3) == 2
+    assert rem(0, 5) == 0 and rem(5, 1) == 0
+    assert rem(7, 0) == 7  # by convention
 
     # fibonacci
     assert [fib(i) for i in range(10)] == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
