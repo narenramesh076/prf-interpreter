@@ -1,4 +1,4 @@
-# prf-interpreter
+# Primitive Recursive Functions
 
 A minimal interpreter for primitive recursive functions in Python.
 
@@ -44,11 +44,28 @@ Additional functions built on the core primitives:
 - Predicates: `sg`, `sg_bar`, `is_zero`, `eq`, `leq`, `lt`
 - Arithmetic: `exp`, `double`, `square`, `tri` (triangular numbers)
 - Division: `div`, `rem`, `divides` (via bounded minimization)
-- Fibonacci: `fib` (demonstrates multi-accumulator technique)
+- Pairing: `pair`, `fst`, `snd` (Cantor pairing for encoding pairs)
+- Fibonacci: `fib` (uses pairing to encode two accumulators)
 
 ```
 python examples.py
 ```
+
+## Cantor pairing
+
+The `pair(a, b)` function encodes two natural numbers as a single number,
+bijectively. The inverse functions `fst(p)` and `snd(p)` recover the components.
+
+```python
+from examples import pair, fst, snd
+
+p = pair(3, 7)   # => 59
+fst(p)           # => 3
+snd(p)           # => 7
+```
+
+This is how PRFs handle data structures. The Fibonacci function uses pairing
+to track two values `(fib(k), fib(k+1))` as a single number at each step.
 
 ## Define your own
 

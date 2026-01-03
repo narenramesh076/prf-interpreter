@@ -126,25 +126,106 @@ class Rem:
 
 rem = Rem()
 
+# ===========================================================================
+# Cantor pairing
+# ===========================================================================
+
+# The Cantor pairing function encodes two natural numbers as one, bijectively.
+# This is fundamental for handling pairs, tuples, and sequences in PRF.
+#
+# pair(a, b) = tri(a + b) + b = (a+b)(a+b+1)/2 + b
+#
+# The inverse functions recover a and b from the encoded pair:
+#   fst(p) extracts the first component
+#   snd(p) extracts the second component
+#
+# To invert, we find w = a + b by searching for the largest w with tri(w) <= p.
+# Then b = p - tri(w), and a = w - b.
+
+# pair(a, b) = tri(a + b) + b
+pair = compose(add, compose(tri, add), proj(1))
+
+
+# Helper: find w such that tri(w) <= p < tri(w+1)
+# This is the "row" in Cantor's diagonal enumeration
+class CantorW:
+    def __call__(self, p):
+        # find smallest w where tri(w+1) > p, then return w
+        exceeds = lambda w: 1 if tri(succ(w)) > p else 0
+        return bmin(exceeds, succ(p))
+
+    def __repr__(self):
+        return "_cantor_w"
+
+
+_cantor_w = CantorW()
+
+
+# snd(p) = p - tri(w) where w = _cantor_w(p)
+class Snd:
+    def __call__(self, p):
+        w = _cantor_w(p)
+        return monus(p, tri(w))
+
+    def __repr__(self):
+        return "snd"
+
+
+snd = Snd()
+
+
+# fst(p) = w - snd(p)
+class Fst:
+    def __call__(self, p):
+        w = _cantor_w(p)
+        return monus(w, snd(p))
+
+    def __repr__(self):
+        return "fst"
+
+
+fst = Fst()
 
 # ===========================================================================
-# Multi-accumulator example: Fibonacci
+# Fibonacci via Cantor pairing
 # ===========================================================================
 
-# Fibonacci requires two accumulators (f_k, f_{k+1}). The standard PRF trick
-# is to encode pairs as single numbers. Here we just iterate directly.
+# Now we can define fib purely in PRF terms. We iterate on pairs:
+#   state_0 = pair(0, 1) = pair(fib(0), fib(1))
+#   state_{k+1} = pair(snd(state_k), fst(state_k) + snd(state_k))
+#
+# Then fib(n) = fst(state_n).
 
+_initial_fib_pair = pair(0, 1)  # encodes (fib(0), fib(1)) = (0, 1)
+
+
+class FibStep:
+    """Transition: (a, b) -> (b, a+b) encoded as pairs."""
+
+    def __call__(self, k, state):
+        a = fst(state)
+        b = snd(state)
+        return pair(b, add(a, b))
+
+    def __repr__(self):
+        return "_fib_step"
+
+
+_fib_step = FibStep()
+
+# fib_pair(n) returns pair(fib(n), fib(n+1))
+fib_pair = prim_rec(
+    compose(lambda: _initial_fib_pair),  # base: pair(0, 1)
+    _fib_step
+)
+
+
+# fib(n) = fst(fib_pair(n))
 class Fib:
-    """
-    Fibonacci via primitive recursion on encoded pairs.
-    Computes (fib(k), fib(k+1)) at each step, returns fib(n).
-    """
+    """Fibonacci via primitive recursion on Cantor-encoded pairs."""
 
     def __call__(self, n):
-        a, b = 0, 1
-        for _ in range(n):
-            a, b = b, a + b
-        return a
+        return fst(fib_pair(n))
 
     def __repr__(self):
         return "fib"
@@ -187,5 +268,29 @@ if __name__ == "__main__":
 
     # fibonacci
     assert [fib(i) for i in range(10)] == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+
+    # cantor pairing
+    # verify pair/fst/snd roundtrip
+    for a in range(15):
+        for b in range(15):
+            p = pair(a, b)
+            assert fst(p) == a, f"fst(pair({a},{b})) = {fst(p)}, expected {a}"
+            assert snd(p) == b, f"snd(pair({a},{b})) = {snd(p)}, expected {b}"
+
+    # verify pair is injective (different inputs -> different outputs)
+    seen = set()
+    for a in range(20):
+        for b in range(20):
+            p = pair(a, b)
+            assert p not in seen, f"pair({a},{b}) collides"
+            seen.add(p)
+
+    # spot checks for known values
+    assert pair(0, 0) == 0
+    assert pair(1, 0) == 1
+    assert pair(0, 1) == 2
+    assert pair(2, 0) == 3
+    assert pair(1, 1) == 4
+    assert pair(0, 2) == 5
 
     print("all examples passed")
