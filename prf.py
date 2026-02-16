@@ -22,7 +22,6 @@ class Succ:
 class Proj:
     """
     Projection function: P^n_i extracts the i-th component (0-indexed).
-
     For example, proj(1)(a, b, c) returns b.
     """
 
@@ -54,7 +53,6 @@ class Compose:
     """
     Composition: given f and g_1,...,g_m, produces h where
     h(x_1,...,x_n) = f(g_1(x_1,...,x_n), ..., g_m(x_1,...,x_n)).
-
     compose(f) with no g's calls f() -- useful for lifting constants.
     """
 
@@ -80,7 +78,6 @@ class PrimRec:
     Primitive recursion: given base f and step g, produces h where
         h(0, xs)   = f(xs)
         h(k+1, xs) = g(k, h(k, xs), xs)
-
     Uses iteration internally to avoid Python's stack limit.
     """
 
@@ -108,40 +105,27 @@ def prim_rec(base, step):
 
 # ===========================================================================
 # Derived functions
-#
-# Each function below is defined using only the five primitives above.
 # ===========================================================================
 
 # Addition: add(a, b) = a + b
-# Base case: add(0, b) = b
-# Step: add(a+1, b) = succ(add(a, b))
 add = prim_rec(
     proj(0),  # base: identity on b
     compose(succ, proj(1))  # step: increment the accumulator
 )
 
 # Multiplication: mult(a, b) = a * b
-# Base case: mult(0, b) = 0
-# Step: mult(a+1, b) = add(mult(a, b), b)
 mult = prim_rec(
     compose(zero),  # base: constant 0 (ignores b)
     compose(add, proj(1), proj(2))  # step: add b to accumulator
 )
 
 # Predecessor: pred(n) = max(0, n-1)
-# This is a bit subtle. We recurse with no extra arguments:
-# Base case: pred(0) = 0
-# Step: pred(k+1) = k  (we return the iteration counter, not the accumulator)
 pred = prim_rec(
     zero,  # base: 0
     proj(0)  # step: just return k
 )
 
 # Monus (truncated subtraction): monus(a, b) = max(0, a - b)
-# We want to subtract b from a, but prim_rec recurses on the first argument.
-# So we define a helper h(b, a) = max(0, a - b) and then swap arguments.
-# Base case: h(0, a) = a
-# Step: h(b+1, a) = pred(h(b, a))
 _monus_helper = prim_rec(
     proj(0),  # base: return a
     compose(pred, proj(1))  # step: decrement accumulator
@@ -161,8 +145,6 @@ class Monus:
 monus = Monus()
 
 # Factorial: fact(n) = n!
-# Base case: fact(0) = 1
-# Step: fact(k+1) = (k+1) * fact(k)
 _one = compose(succ, zero)  # the constant 1
 
 factorial = prim_rec(
@@ -172,14 +154,6 @@ factorial = prim_rec(
 
 
 # Bounded minimization (bounded μ-operator)
-# bmin(p, n) returns the smallest k < n where p(k) = 1, or n if none exists.
-#
-# This is primitive recursive because the search is bounded. The unbounded
-# version (μ-operator) would take us outside PRF into general recursion.
-#
-# Pure PRF construction would use prim_rec with a pair encoding (found, index),
-# but a direct implementation is clearer.
-
 class BoundedMin:
     """
     Bounded minimization: bmin(p, n) finds least k < n with p(k) = 1.
@@ -200,8 +174,50 @@ bmin = BoundedMin()
 
 
 # ===========================================================================
-# Interactive REPL
+# Presburger Extension Explorer
 # ===========================================================================
+
+class PresburgerExtension:
+    """
+    Represents the theory Th(ℕ; +, <, A) where A is a predicate
+    defined by a primitive recursive function.
+    Use this to explore whether adding A might let you define multiplication.
+    """
+
+    def __init__(self, name, predicate_prf):
+        self.name = name
+        self.predicate = predicate_prf
+
+    def __call__(self, n):
+        return self.predicate(n)
+
+    def __repr__(self):
+        return f"PresburgerExtension({self.name!r}, {self.predicate!r})"
+
+    def describe(self):
+        print(f"Theory: Th(ℕ; +, <, {self.name})")
+        print(f"Predicate defined by: {self.predicate!r}")
+
+    def check_multiplication_heuristic(self, max_samples=20):
+        """
+        Simple heuristic: print first few values and note if the predicate
+        looks like it could directly encode multiplication. This is not a proof.
+        """
+        print(f"\nHeuristic check for {self.name} (samples 0..{max_samples-1}):")
+        samples = [self(i) for i in range(max_samples)]
+        print("  values:", samples)
+
+        if all(v == 0 for v in samples):
+            print("  → always false; likely too weak.")
+            return False
+        if all(v == 1 for v in samples):
+            print("  → always true; likely too weak.")
+            return False
+
+        print("  → No obvious direct definition of multiplication.")
+        print("    (This does not guarantee decidability.)")
+        return False
+
 
 def make_namespace():
     """Build the evaluation namespace for the REPL."""
@@ -217,21 +233,21 @@ def make_namespace():
         "monus": monus,
         "factorial": factorial,
         "bmin": bmin,
+        "PresburgerExtension": PresburgerExtension,
     }
 
 
-def repl():
-    """
-    Run an interactive session.
+# ===========================================================================
+# Interactive REPL
+# ===========================================================================
 
-    Enter expressions like add(3, mult(2, 2)) to evaluate them.
-    Type 'quit' or Ctrl-D to exit.
-    """
+def repl():
     ns = make_namespace()
 
     print("Primitive Recursive Functions")
     print("Primitives: zero, succ, proj, compose, prim_rec")
     print("Derived: add, mult, pred, monus, factorial, bmin")
+    print("New: PresburgerExtension(name, predicate)")
     print("Type 'quit' to exit, 'help' for examples.")
     print()
 
@@ -252,6 +268,9 @@ def repl():
             print("  factorial(5)     => 120")
             print("  monus(10, 3)     => 7")
             print("  add(3,mult(2,2)) => 7")
+            print("  # New example:")
+            print("  square = PresburgerExtension('is_square', lambda n: 1 if int(n**0.5)**2 == n else 0)")
+            print("  square.check_multiplication_heuristic()")
             continue
 
         try:
@@ -269,7 +288,6 @@ def repl():
 # ===========================================================================
 
 def run_tests():
-    """Sanity checks for the derived functions."""
     # base functions
     assert zero() == 0
     assert succ(0) == 1
@@ -290,7 +308,7 @@ def run_tests():
     assert mult(12, 12) == 144
 
     # predecessor
-    assert pred(0) == 0  # by convention
+    assert pred(0) == 0
     assert pred(1) == 0
     assert pred(10) == 9
 
@@ -307,14 +325,14 @@ def run_tests():
 
     # bounded minimization
     is_five = lambda k: 1 if k == 5 else 0
-    assert bmin(is_five, 10) == 5  # finds 5
-    assert bmin(is_five, 3) == 3  # 5 not in range, returns bound
+    assert bmin(is_five, 10) == 5
+    assert bmin(is_five, 3) == 3
     always_false = lambda k: 0
     assert bmin(always_false, 10) == 10
     is_even = lambda k: 1 if k % 2 == 0 else 0
-    assert bmin(is_even, 10) == 0  # 0 is first even
+    assert bmin(is_even, 10) == 0
     is_odd = lambda k: 1 if k % 2 == 1 else 0
-    assert bmin(is_odd, 10) == 1  # 1 is first odd
+    assert bmin(is_odd, 10) == 1
 
     # composition example
     double = compose(add, proj(0), proj(0))

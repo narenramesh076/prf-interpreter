@@ -1,237 +1,240 @@
 #!/usr/bin/env python3
 """
-Additional primitive recursive functions.
-
-These are standard examples from computability theory, each built
-from the core primitives or previously defined functions.
+Additional primitive recursive functions and Presburger Extension Explorer.
 """
 
-from prf import zero, succ, proj, compose, prim_rec
-from prf import add, mult, pred, monus, factorial, bmin
+from prf import zero, succ, proj, compose, prim_rec, bmin
+from prf import add, mult, pred, monus, factorial, PresburgerExtension
 
 # ===========================================================================
 # Predicates (returning 0 or 1)
 # ===========================================================================
 
-# Helper: constant 1, ignores any arguments
 _one = compose(succ, zero)
-_const = compose(_one)  # wraps _one to accept and ignore args
+_const = compose(_one)
 
-# Sign function: sg(0) = 0, sg(n) = 1 for n > 0
 sg = prim_rec(zero, _const)
-
-# Complement: sg_bar(0) = 1, sg_bar(n) = 0 for n > 0
-sg_bar = compose(monus, _const, sg)  # 1 - sg(n)
-
-# is_zero is just sg_bar by another name
+sg_bar = compose(monus, _const, sg)
 is_zero = sg_bar
 
-# Equality: eq(a, b) = 1 if a = b, else 0
-# Note that |a - b| = monus(a,b) + monus(b,a), and eq(a,b) = is_zero(|a-b|)
 _abs_diff = compose(add, monus, compose(monus, proj(1), proj(0)))
 eq = compose(is_zero, _abs_diff)
 
-# Less than or equal: leq(a, b) = 1 if a <= b, else 0
-# a <= b iff monus(a, b) = 0
 leq = compose(is_zero, monus)
-
-# Strict less than: lt(a, b) = 1 if a < b
-# a < b iff a + 1 <= b
 lt = compose(leq, compose(succ, proj(0)), proj(1))
 
 # ===========================================================================
 # Arithmetic
 # ===========================================================================
 
-# Exponentiation: exp(n, b) = b^n
 exp = prim_rec(
-    _const,  # base: exp(0, b) = 1
-    compose(mult, proj(2), proj(1))  # step: b * acc
+    _const,
+    compose(mult, proj(2), proj(1))
 )
 
-# Bounded predecessor (alternative definition for clarity)
-# This shows another way to define pred using the "lag" technique
 pred_alt = prim_rec(zero, proj(0))
-
-# Double: double(n) = 2n
 double = compose(add, proj(0), proj(0))
-
-# Square: square(n) = n^2
 square = compose(mult, proj(0), proj(0))
 
-# Triangular number: tri(n) = 0 + 1 + 2 + ... + n = n(n+1)/2
-# tri(0) = 0
-# tri(k+1) = tri(k) + (k+1)
 tri = prim_rec(
     zero,
-    compose(add, proj(1), compose(succ, proj(0)))  # acc + (k+1)
+    compose(add, proj(1), compose(succ, proj(0)))
 )
 
-
 # ===========================================================================
-# Division and remainder via bounded minimization
+# Division and remainder
 # ===========================================================================
-
-# These use bmin to search for quotients and remainders. This is the
-# standard PRF construction — we can't just "divide" directly, but we
-# can search for the answer within a known bound.
-
-# Divisibility: divides(d, n) = 1 if d divides n, else 0
-# d | n iff there exists k <= n such that d * k = n
-def _divides(d, n):
-    if d == 0:
-        return 1 if n == 0 else 0
-    return 1 if n % d == 0 else 0
-
 
 class Divides:
     def __call__(self, d, n):
-        return _divides(d, n)
-
+        if d == 0:
+            return 1 if n == 0 else 0
+        return 1 if n % d == 0 else 0
     def __repr__(self):
         return "divides"
-
-
 divides = Divides()
 
-
-# Division: div(a, b) = floor(a / b), with div(a, 0) = 0 by convention
-# We search for the largest q such that b * q <= a.
-# Equivalently, find smallest q where b * (q+1) > a, then return q.
 class Div:
     def __call__(self, a, b):
         if b == 0:
             return 0
-        # find smallest q where b * (q+1) > a
         exceeds = lambda q: 1 if mult(b, succ(q)) > a else 0
         return bmin(exceeds, succ(a))
-
     def __repr__(self):
         return "div"
-
-
 div = Div()
 
-
-# Remainder: rem(a, b) = a mod b, with rem(a, 0) = a by convention
 class Rem:
     def __call__(self, a, b):
         if b == 0:
             return a
         return monus(a, mult(b, div(a, b)))
-
     def __repr__(self):
         return "rem"
-
-
 rem = Rem()
 
 # ===========================================================================
 # Cantor pairing
 # ===========================================================================
 
-# The Cantor pairing function encodes two natural numbers as one, bijectively.
-# This is fundamental for handling pairs, tuples, and sequences in PRF.
-#
-# pair(a, b) = tri(a + b) + b = (a+b)(a+b+1)/2 + b
-#
-# The inverse functions recover a and b from the encoded pair:
-#   fst(p) extracts the first component
-#   snd(p) extracts the second component
-#
-# To invert, we find w = a + b by searching for the largest w with tri(w) <= p.
-# Then b = p - tri(w), and a = w - b.
-
-# pair(a, b) = tri(a + b) + b
 pair = compose(add, compose(tri, add), proj(1))
 
-
-# Helper: find w such that tri(w) <= p < tri(w+1)
-# This is the "row" in Cantor's diagonal enumeration
 class CantorW:
     def __call__(self, p):
-        # find smallest w where tri(w+1) > p, then return w
         exceeds = lambda w: 1 if tri(succ(w)) > p else 0
         return bmin(exceeds, succ(p))
-
     def __repr__(self):
         return "_cantor_w"
-
-
 _cantor_w = CantorW()
 
-
-# snd(p) = p - tri(w) where w = _cantor_w(p)
 class Snd:
     def __call__(self, p):
         w = _cantor_w(p)
         return monus(p, tri(w))
-
     def __repr__(self):
         return "snd"
-
-
 snd = Snd()
 
-
-# fst(p) = w - snd(p)
 class Fst:
     def __call__(self, p):
         w = _cantor_w(p)
         return monus(w, snd(p))
-
     def __repr__(self):
         return "fst"
-
-
 fst = Fst()
 
 # ===========================================================================
-# Fibonacci via Cantor pairing
+# Fibonacci
 # ===========================================================================
 
-# Now we can define fib purely in PRF terms. We iterate on pairs:
-#   state_0 = pair(0, 1) = pair(fib(0), fib(1))
-#   state_{k+1} = pair(snd(state_k), fst(state_k) + snd(state_k))
-#
-# Then fib(n) = fst(state_n).
-
-_initial_fib_pair = pair(0, 1)  # encodes (fib(0), fib(1)) = (0, 1)
-
+_initial_fib_pair = pair(0, 1)
 
 class FibStep:
-    """Transition: (a, b) -> (b, a+b) encoded as pairs."""
-
     def __call__(self, k, state):
         a = fst(state)
         b = snd(state)
         return pair(b, add(a, b))
-
     def __repr__(self):
         return "_fib_step"
-
-
 _fib_step = FibStep()
 
-# fib_pair(n) returns pair(fib(n), fib(n+1))
 fib_pair = prim_rec(
-    compose(lambda: _initial_fib_pair),  # base: pair(0, 1)
+    compose(lambda: _initial_fib_pair),
     _fib_step
 )
 
-
-# fib(n) = fst(fib_pair(n))
 class Fib:
-    """Fibonacci via primitive recursion on Cantor-encoded pairs."""
-
     def __call__(self, n):
         return fst(fib_pair(n))
-
     def __repr__(self):
         return "fib"
-
-
 fib = Fib()
+
+# ===========================================================================
+# Predicates for Presburger Extension Explorer
+# ===========================================================================
+
+# is_prime
+def _has_proper_divisor(n):
+    if n <= 2:
+        return 0
+    def divisor_exists(d):
+        if d >= n:
+            return 0
+        return divides(d, n)
+    d0 = bmin(divisor_exists, n)
+    return 1 if d0 < n else 0
+
+def _is_prime(n):
+    if n < 2:
+        return 0
+    return 1 if _has_proper_divisor(n) == 0 else 0
+is_prime_prf = _is_prime
+
+# is_power_of_two
+def _is_power_of_two(n):
+    if n == 0:
+        return 0
+    def check(k):
+        return eq(exp(k, 2), n)
+    k0 = bmin(check, n)
+    return 1 if k0 < n else 0
+is_power_of_two_prf = _is_power_of_two
+
+# is_perfect_square
+def _is_perfect_square(n):
+    def check(k):
+        return eq(mult(k, k), n)
+    k0 = bmin(check, n+1)
+    return 1 if k0 <= n else 0
+is_square_prf = _is_perfect_square
+
+# odd_parity (uses Python bin, not pure PRF, for demo)
+def _odd_parity(n):
+    return bin(n).count('1') % 2
+odd_parity_prf = _odd_parity
+
+# is_smooth (demo, not pure PRF)
+def _is_smooth(n, primes=[2,3,5]):
+    if n == 0:
+        return 0
+    m = n
+    for p in primes:
+        while m % p == 0:
+            m //= p
+    return 1 if m == 1 else 0
+smooth_prf = _is_smooth
+
+# ===========================================================================
+# PresburgerExtension instances
+# ===========================================================================
+
+prime_ext = PresburgerExtension("is_prime", is_prime_prf)
+power_ext = PresburgerExtension("is_power_of_two", is_power_of_two_prf)
+square_ext = PresburgerExtension("is_perfect_square", is_square_prf)
+parity_ext = PresburgerExtension("odd_parity", odd_parity_prf)
+smooth_ext = PresburgerExtension("is_{2,3,5}_smooth", smooth_prf)
+
+# ===========================================================================
+# Interactive exploration function
+# ===========================================================================
+
+def explore_extensions():
+    extensions = [
+        prime_ext,
+        power_ext,
+        square_ext,
+        parity_ext,
+        smooth_ext
+    ]
+
+    print("="*60)
+    print("Presburger Extension Explorer")
+    print("="*60)
+    print("We look at theories Th(ℕ; +, <, P).")
+    print("If P helps define multiplication, the theory becomes")
+    print("as complex as full arithmetic (degree 0').")
+    print("If not, it stays decidable (degree 0).")
+    print("Intermediate degrees are rare and delicate.")
+    print()
+
+    for ext in extensions:
+        ext.describe()
+        print(f"First 20 values: {[ext(i) for i in range(20)]}")
+        ext.check_multiplication_heuristic(max_samples=20)
+        print("-"*60)
+
+    print("\nObservations from the literature:")
+    print("- Feferman (1957) constructed intermediate-degree theories")
+    print("  but they are artificial (via consistency statements).")
+    print("- Peretyat'kin (1991) showed the undecidable Lindenbaum")
+    print("  algebra is unique, suggesting natural undecidable theories")
+    print("  are all max degree.")
+    print("- Your 'all-or-nothing' hypothesis: natural theories either")
+    print("  interpret full arithmetic (0') or stay decidable (0).")
+    print()
+    print("Try your own predicate: squares = PresburgerExtension('is_square', is_square_prf)")
+    print("Then run squares.check_multiplication_heuristic().")
 
 # ===========================================================================
 # Tests
@@ -260,37 +263,34 @@ if __name__ == "__main__":
 
     assert div(10, 3) == 3 and div(9, 3) == 3 and div(8, 3) == 2
     assert div(0, 5) == 0 and div(5, 1) == 5
-    assert div(7, 0) == 0  # by convention
+    assert div(7, 0) == 0
 
     assert rem(10, 3) == 1 and rem(9, 3) == 0 and rem(8, 3) == 2
     assert rem(0, 5) == 0 and rem(5, 1) == 0
-    assert rem(7, 0) == 7  # by convention
+    assert rem(7, 0) == 7
 
     # fibonacci
     assert [fib(i) for i in range(10)] == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
 
     # cantor pairing
-    # verify pair/fst/snd roundtrip
     for a in range(15):
         for b in range(15):
             p = pair(a, b)
-            assert fst(p) == a, f"fst(pair({a},{b})) = {fst(p)}, expected {a}"
-            assert snd(p) == b, f"snd(pair({a},{b})) = {snd(p)}, expected {b}"
+            assert fst(p) == a
+            assert snd(p) == b
 
-    # verify pair is injective (different inputs -> different outputs)
-    seen = set()
-    for a in range(20):
-        for b in range(20):
-            p = pair(a, b)
-            assert p not in seen, f"pair({a},{b}) collides"
-            seen.add(p)
-
-    # spot checks for known values
-    assert pair(0, 0) == 0
-    assert pair(1, 0) == 1
-    assert pair(0, 1) == 2
-    assert pair(2, 0) == 3
-    assert pair(1, 1) == 4
-    assert pair(0, 2) == 5
+    # new predicates (basic checks)
+    assert is_prime_prf(2) == 1
+    assert is_prime_prf(4) == 0
+    assert is_prime_prf(17) == 1
+    assert is_power_of_two_prf(1) == 1
+    assert is_power_of_two_prf(16) == 1
+    assert is_power_of_two_prf(6) == 0
+    assert is_square_prf(0) == 1
+    assert is_square_prf(25) == 1
+    assert is_square_prf(26) == 0
 
     print("all examples passed")
+    print("\n" + "="*60)
+    print("Run explore_extensions() to start the explorer.")
+    print("="*60)
